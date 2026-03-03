@@ -18,7 +18,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
 import traceback
-from dataclasses import asdict
 
 from utils.llm_client import LLMClient
 from utils.io import EpisodeLog, save_episode, ensure_dir
@@ -45,8 +44,12 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--data",      default="data/test.json",      help="数据集路径")
     p.add_argument("--output",    default="logs/run.jsonl",       help="输出 JSONL 路径")
-    p.add_argument("--model",     default="gpt-4o-mini",          help="LLM 模型名称")
-    p.add_argument("--api_key",   default=None,                   help="API Key（默认读 OPENAI_API_KEY 环境变量）")
+    p.add_argument("--model",     default="gpt-4o-mini",          help="默认 LLM 模型名称（未单独指定时生效）")
+    p.add_argument("--player_model", default=None,                  help="Player A/B/C 使用的模型（默认同 --model）")
+    p.add_argument("--host_model",   default=None,                  help="Host D 使用的模型（默认同 --model）")
+    p.add_argument("--judge_model",  default=None,                  help="裁判 Env/Judge 使用的模型（默认同 --model）")
+    p.add_argument("--api_key",   default=None,                   help="API Key（默认读 OPENAI_API_KEY/HF_TOKEN 环境变量）")
+    p.add_argument("--hf_token", default=None,                   help="HuggingFace token（等价于 --api_key）")
     p.add_argument("--base_url",  default=None,                   help="OpenAI 兼容 base_url（本地模型）")
     p.add_argument("--mode",      default="zero", choices=["zero", "few"], help="prompt 模式")
     p.add_argument("--max_round", type=int, default=25,           help="最大轮数")
@@ -57,23 +60,37 @@ def parse_args():
 
 def build_components(args):
     """根据命令行参数构建所有组件。"""
-    # 共用同一个 LLMClient（可按需为 judge / host 配置不同模型）
-    client = LLMClient(
-        model=args.model,
-        api_key=args.api_key,
+    resolved_api_key = args.api_key or args.hf_token
+    player_model = args.player_model or args.model
+    host_model = args.host_model or args.model
+    judge_model = args.judge_model or args.model
+
+    player_client = LLMClient(
+        model=player_model,
+        api_key=resolved_api_key,
+        base_url=args.base_url,
+    )
+    host_client = LLMClient(
+        model=host_model,
+        api_key=resolved_api_key,
+        base_url=args.base_url,
+    )
+    judge_client = LLMClient(
+        model=judge_model,
+        api_key=resolved_api_key,
         base_url=args.base_url,
     )
 
     # 环境（裁判）
     env = SPEnv(
-        judge_client=client,
+        judge_client=judge_client,
         answer_prompt_builder=make_referee_prompt,
         max_round=args.max_round,
     )
 
     # Players
     player_kwargs = dict(
-        client=client,
+        client=player_client,
         system_prompt_builder=make_player_system_prompt,
         question_prompt_builder=make_question_prompt,
         final_prompt_builder=make_final_answer_prompt,
@@ -87,13 +104,13 @@ def build_components(args):
 
     # Host
     host = HostAgent(
-        client=client,
+        client=host_client,
         summarize_prompt_builder=make_summarize_prompt,
         stop_prompt_builder=make_stop_prompt,
         final_prompt_builder=make_host_final_prompt,
     )
 
-    return env, players, host
+    return env, players, host, {"player": player_model, "host": host_model, "judge": judge_model}
 
 
 def run_episode(env, players, host, sample):
@@ -141,9 +158,10 @@ def main():
     args = parse_args()
     ensure_dir(os.path.dirname(args.output) or ".")
     samples = load_sp_dataset_slice(args.data, start=args.start, end=args.end)
-    env, players, host = build_components(args)
+    env, players, host, model_map = build_components(args)
 
     print(f"[run_sp] 共 {len(samples)} 个样本，输出至 {args.output}")
+    print("[run_sp] 模型配置:", model_map)
     for i, sample in enumerate(samples):
         try:
             log = run_episode(env, players, host, sample)

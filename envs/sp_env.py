@@ -48,7 +48,7 @@ class SPEnv:
     ) -> Tuple[SPState, str]:
         """
         执行一步交互：
-        1. 用 judge_client 回答 question（Yes / No / Unknown）
+        1. 用 judge_client 回答 question（Yes / No / Yes and No / No Relation）
         2. 写入 history
         3. 返回 (new_state, answer)
         """
@@ -61,7 +61,7 @@ class SPEnv:
         messages = [{"role": "user", "content": prompt}]
         raw_answer = self.judge_client.chat(messages, temperature=0.0, max_tokens=16)
 
-        # 规范化输出为 Yes / No / Unknown
+        # 规范化输出为 Yes / No / Yes and No / No Relation
         answer = self._normalize_answer(raw_answer)
 
         # 写入 history
@@ -75,8 +75,14 @@ class SPEnv:
     @staticmethod
     def _normalize_answer(raw: str) -> str:
         text = raw.strip().lower()
+        # 优先匹配复合标签，避免被 yes/no 前缀提前吞掉
+        if text.startswith("yes and no"):
+            return "Yes and No"
+        if text.startswith("no relation"):
+            return "No Relation"
         if text.startswith("yes"):
             return "Yes"
         if text.startswith("no"):
             return "No"
-        return "Unknown"
+        # 对不规范输出做保守降级：无法识别时归为 No Relation
+        return "No Relation"

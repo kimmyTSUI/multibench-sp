@@ -11,7 +11,7 @@ from typing import List, Optional, Any, Dict
 class QATurn:
     agent: str           # 提问者：'A' / 'B' / 'C'
     question: str        # 该 agent 提出的问题
-    answer: str          # 环境/Judge 给出的回答：Yes / No / Unknown
+    answer: str          # 环境/Judge 给出的回答：Yes / No / Yes and No / No Relation
     axis: Optional[str] = None   # 可选：由 Host 或 Judge 赋值的轴标签
 
 
