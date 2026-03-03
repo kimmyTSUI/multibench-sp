@@ -114,6 +114,26 @@ python scripts/run_sp.py \
 
 > 注意：本项目的 `LLMClient` 走的是 OpenAI 兼容接口，因此需要一个 OpenAI-compatible 的 `base_url`。
 
+
+### 3.3 固定回合实验（你这个15回合接龙）
+
+当前默认行为是**固定跑到 `max_round`** 再结束；Host 不会提前停止。
+
+- 如果你的实验设计是每个样本固定 15 回合：传 `--max_round 15` 即可。
+- 只有在你显式加 `--allow_host_early_stop` 时，Host 才允许提前终止。
+
+示例：
+
+```bash
+python scripts/run_sp.py \
+    --data data/test.json \
+    --output logs/run_15round.jsonl \
+    --base_url https://openrouter.ai/api/v1 \
+    --model openai/gpt-4o \
+    --max_round 15 \
+    --start 0 --end 1
+```
+
 ### 4. 评估
 
 ```bash

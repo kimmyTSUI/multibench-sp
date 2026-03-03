@@ -52,7 +52,8 @@ def parse_args():
     p.add_argument("--hf_token", default=None,                   help="HuggingFace token（等价于 --api_key）")
     p.add_argument("--base_url",  default=None,                   help="OpenAI 兼容 base_url（本地模型）")
     p.add_argument("--mode",      default="zero", choices=["zero", "few"], help="prompt 模式")
-    p.add_argument("--max_round", type=int, default=25,           help="最大轮数")
+    p.add_argument("--max_round", type=int, default=25,           help="最大轮数（你的实验可设为15）")
+    p.add_argument("--allow_host_early_stop", action="store_true", help="允许 Host 在 max_round 之前提前停止（默认关闭）")
     p.add_argument("--start",     type=int, default=0,            help="数据集起始索引")
     p.add_argument("--end",       type=int, default=None,         help="数据集结束索引（不含）")
     return p.parse_args()
@@ -113,12 +114,12 @@ def build_components(args):
     return env, players, host, {"player": player_model, "host": host_model, "judge": judge_model}
 
 
-def run_episode(env, players, host, sample):
+def run_episode(env, players, host, sample, args):
     """跑一局游戏，返回 EpisodeLog。"""
     state = env.reset(sample)
     player_order = ["A", "B", "C"]
 
-    while not state.done:
+    while state.round < state.max_round:
         order = host.choose_turn_order(state, player_order)
         for p in order:
             q = players[p].act(state)
@@ -127,9 +128,14 @@ def run_episode(env, players, host, sample):
         host.summarize(state)
         state.round += 1
 
-        if host.should_stop(state):
+        if args.allow_host_early_stop and host.should_stop(state):
             state.done = True
-            state.done_reason = "max_round_or_host_stop"
+            state.done_reason = "host_stop"
+            break
+
+    if not state.done:
+        state.done = True
+        state.done_reason = "max_round_reached"
 
     # 收集最终答案
     final_answers = {}
@@ -164,7 +170,7 @@ def main():
     print("[run_sp] 模型配置:", model_map)
     for i, sample in enumerate(samples):
         try:
-            log = run_episode(env, players, host, sample)
+            log = run_episode(env, players, host, sample, args)
             save_episode(log, args.output)
             print(f"  [{i+1}/{len(samples)}] sample_id={sample.index} done")
         except Exception as e:
