@@ -66,6 +66,8 @@ Prompts are expected to be written in English (for Players, Host, and Referee) i
 
 ```bash
 export OPENAI_API_KEY=<openai_compatible_key>
+# 或者（OpenRouter 也可用这个）
+export OPENROUTER_API_KEY=<your_openrouter_key>
 # 或者
 export HF_TOKEN=<your_huggingface_token_or_gateway_key>
 
