@@ -1,7 +1,7 @@
 # MultiBench SP — 4-Agent Interaction Framework
 
-多角色协作「情境推理（Situational Puzzle）」评估框架。  
-**Host D + Player A/B/C** 以 interaction loop 方式组织，支持可扩展的 Prompt 自定义与多指标评估。
+情境推理（Situational Puzzle）评估框架（当前分支为**单 agent 版本**）。  
+Agent 可选 **A/B/C**（分别对应 fact/value/knowledge prompt 角色），每局固定多轮提问后输出最终结论。
 
 ---
 
@@ -52,31 +52,97 @@ pip install openai
 | `make_player_system_prompt(role, mode)` | A/B/C 的角色 system prompt |
 | `make_question_prompt(role, state, mode)` | 生成下一个 Yes/No 问题的 user prompt |
 | `make_final_answer_prompt(state)` | 游戏结束时的最终解释 prompt |
-| `make_referee_prompt(surface, bottom, question)` | 裁判回答 Yes/No/Unknown 的 prompt |
+| `make_referee_prompt(surface, bottom, question)` | 裁判回答 Yes/No/Yes and No/No Relation 的 prompt |
 | `make_summarize_prompt(state)` | Host 汇总线索的 prompt |
 | `make_stop_prompt(state)` | （可选）Host 智能停止判断 |
 | `make_host_final_prompt(state, player_answers)` | （可选）Host 最终整合 |
 
+
+### Prompt language
+
+Prompts are expected to be written in English (for Players, Host, and Referee) in `prompts/sp_prompts.py`.
+
 ### 3. 运行游戏
 
 ```bash
-export OPENAI_API_KEY=sk-...
+export OPENAI_API_KEY=<openai_compatible_key>
+# 或者（OpenRouter 也可用这个）
+export OPENROUTER_API_KEY=<your_openrouter_key>
+# 或者
+export HF_TOKEN=<your_huggingface_token_or_gateway_key>
 
 python scripts/run_sp.py \
     --data data/test.json \
-    --output logs/run_001.jsonl \
-    --model gpt-4o-mini \
+    --output logs/run_single_A.jsonl \
+    --agent A \
+    --model openai/gpt-4o \
+    --base_url https://openrouter.ai/api/v1 \
+    --max_round 15 \
+    --start 0 --end 5
+```
+
+
+### 3.1 模型调用位置（多 Agent 用什么模型看这里）
+
+模型是在 `scripts/run_sp.py` 的 `build_components()` 里创建并注入的：
+
+- `player_client`：给 Player A/B/C
+- `host_client`：给 Host D
+- `judge_client`：给 Env 裁判
+
+命令行参数支持：
+
+- `--model`：默认模型（所有角色未单独指定时使用）
+- `--agent`：选择单 agent（A/B/C）
+- `--agent_model`：单 agent 模型（默认同 `--model`）
+- `--judge_model`：裁判模型（默认同 `--model`）
+- `--hf_token`：HuggingFace token（等价于 `--api_key`）
+
+### 3.2 你这次实验（四个角色都用同一个模型）
+
+如果你第一次实验希望四个角色都用 HuggingFace 的 `meta-llama/Llama-3.1-8B-Instruct`，直接把该模型名传给 `--model` 即可：
+
+```bash
+export HF_TOKEN=<your_hf_or_gateway_key>
+
+python scripts/run_sp.py \
+    --data data/test.json \
+    --output logs/run_llama31_8b.jsonl \
+    --base_url <your_openai_compatible_hf_endpoint> \
+    --model meta-llama/Llama-3.1-8B-Instruct \
     --mode zero \
     --max_round 25 \
-    --start 0 --end 5   # 先跑 5 条测试
+    --start 0 --end 5
+```
+
+> 注意：本项目的 `LLMClient` 走的是 OpenAI 兼容接口，因此需要一个 OpenAI-compatible 的 `base_url`。
+
+
+### 3.3 固定回合实验（你这个15回合接龙）
+
+当前默认行为是**固定跑到 `max_round`** 再结束；Host 不会提前停止。
+
+- 如果你的实验设计是每个样本固定 15 回合：传 `--max_round 15` 即可。
+- 只有在你显式加 `--allow_host_early_stop` 时，Host 才允许提前终止。
+
+示例：
+
+```bash
+python scripts/run_sp.py \
+    --data data/test.json \
+    --output logs/run_15round.jsonl \
+    --base_url https://openrouter.ai/api/v1 \
+    --model openai/gpt-4o \
+    --max_round 15 \
+    --start 0 --end 1
 ```
 
 ### 4. 评估
 
 ```bash
 python scripts/evaluate_sp.py \
-    --input logs/run_001.jsonl \
-    --output logs/metrics_001.json
+    --input logs/run_single_A.jsonl \
+    --output logs/metrics_single_A.json
 ```
 
 ---
@@ -115,8 +181,5 @@ save_episode(log, output_path)
 
 ## 评估指标
 
-- **F1_char / F1_word**：final_answer 与谜底的字/词级 F1
+- **Final Accuracy**：final_answer 与谜底的 exact-match 准确度（0/1）
 - **Key Coverage**：key questions 覆盖率（process score）
-- **Axis Contribution**：各 Agent 提问分布与 Yes 率
-- **Misleading Correction**：No/Unknown 后的纠正轨迹
-- **Convergence Curve**：逐轮覆盖率曲线
