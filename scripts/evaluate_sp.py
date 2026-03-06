@@ -1,12 +1,12 @@
 """
 scripts/evaluate_sp.py
-评估脚本：
+单 agent 评估脚本：
   读取 EpisodeLog JSONL -> 计算指标 -> 输出汇总（JSON + 打印）
 
 用法示例：
   python scripts/evaluate_sp.py \
-      --input logs/run_001.jsonl \
-      --output logs/metrics_001.json
+      --input logs/run_single.jsonl \
+      --output logs/metrics_single.json
 """
 
 import sys, os
@@ -22,26 +22,22 @@ from eval.metrics import compute_all_metrics
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--input",  required=True, help="EpisodeLog JSONL 路径")
-    p.add_argument("--output", default=None,  help="指标输出 JSON 路径（可选）")
+    p.add_argument("--input", required=True, help="EpisodeLog JSONL 路径")
+    p.add_argument("--output", default=None, help="指标输出 JSON 路径（可选）")
     return p.parse_args()
 
 
 def aggregate(all_metrics):
-    """对所有 episode 的指标做宏平均。"""
     agg = {}
-    keys = ["A_f1_char", "A_f1_word", "B_f1_char", "B_f1_word",
-            "C_f1_char", "C_f1_word"]
-    for k in keys:
-        vals = [m[k] for m in all_metrics if k in m]
-        agg[k] = mean(vals) if vals else 0.0
+    acc_vals = [m.get("final_accuracy", 0.0) for m in all_metrics]
+    agg["final_accuracy"] = mean(acc_vals) if acc_vals else 0.0
 
-    # key coverage 宏平均
-    cov_vals = [m["key_coverage"].get("coverage_rate", 0.0)
-                for m in all_metrics
-                if "key_coverage" in m and "error" not in m["key_coverage"]]
+    cov_vals = [
+        m.get("key_coverage", {}).get("coverage_rate", 0.0)
+        for m in all_metrics
+        if "key_coverage" in m
+    ]
     agg["key_coverage_rate"] = mean(cov_vals) if cov_vals else 0.0
-
     return agg
 
 

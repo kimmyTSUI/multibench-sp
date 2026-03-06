@@ -1,7 +1,7 @@
 # MultiBench SP — 4-Agent Interaction Framework
 
-多角色协作「情境推理（Situational Puzzle）」评估框架。  
-**Host D + Player A/B/C** 以 interaction loop 方式组织，支持可扩展的 Prompt 自定义与多指标评估。
+情境推理（Situational Puzzle）评估框架（当前分支为**单 agent 版本**）。  
+Agent 可选 **A/B/C**（分别对应 fact/value/knowledge prompt 角色），每局固定多轮提问后输出最终结论。
 
 ---
 
@@ -73,11 +73,12 @@ export HF_TOKEN=<your_huggingface_token_or_gateway_key>
 
 python scripts/run_sp.py \
     --data data/test.json \
-    --output logs/run_001.jsonl \
-    --model gpt-4o-mini \
-    --mode zero \
-    --max_round 25 \
-    --start 0 --end 5   # 先跑 5 条测试
+    --output logs/run_single_A.jsonl \
+    --agent A \
+    --model openai/gpt-4o \
+    --base_url https://openrouter.ai/api/v1 \
+    --max_round 15 \
+    --start 0 --end 5
 ```
 
 
@@ -92,9 +93,9 @@ python scripts/run_sp.py \
 命令行参数支持：
 
 - `--model`：默认模型（所有角色未单独指定时使用）
-- `--player_model`：仅 Player A/B/C
-- `--host_model`：仅 Host D
-- `--judge_model`：仅裁判
+- `--agent`：选择单 agent（A/B/C）
+- `--agent_model`：单 agent 模型（默认同 `--model`）
+- `--judge_model`：裁判模型（默认同 `--model`）
 - `--hf_token`：HuggingFace token（等价于 `--api_key`）
 
 ### 3.2 你这次实验（四个角色都用同一个模型）
@@ -140,8 +141,8 @@ python scripts/run_sp.py \
 
 ```bash
 python scripts/evaluate_sp.py \
-    --input logs/run_001.jsonl \
-    --output logs/metrics_001.json
+    --input logs/run_single_A.jsonl \
+    --output logs/metrics_single_A.json
 ```
 
 ---
@@ -180,8 +181,5 @@ save_episode(log, output_path)
 
 ## 评估指标
 
-- **F1_char / F1_word**：final_answer 与谜底的字/词级 F1
+- **Final Accuracy**：final_answer 与谜底的 exact-match 准确度（0/1）
 - **Key Coverage**：key questions 覆盖率（process score）
-- **Axis Contribution**：各 Agent 提问分布与 Yes 率
-- **Misleading Correction**：No/Unknown 后的纠正轨迹
-- **Convergence Curve**：逐轮覆盖率曲线
