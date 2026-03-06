@@ -53,8 +53,15 @@ def load_sp_dataset(path: str) -> List[SPSample]:
         kqs = _extract_key_questions(story_tree)
 
         # 如果顶层也有 key_question 字段则一并加入
-        if "key_question" in item and item["key_question"] not in kqs:
-            kqs.insert(0, item["key_question"])
+        top_kq = item.get("key_question")
+        if isinstance(top_kq, list):
+            # 兼容数据集中 key_question 为列表的情况
+            for q in reversed(top_kq):
+                if isinstance(q, str) and q not in kqs:
+                    kqs.insert(0, q)
+        elif isinstance(top_kq, str):
+            if top_kq not in kqs:
+                kqs.insert(0, top_kq)
 
         meta = {
             k: v

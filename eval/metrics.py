@@ -44,6 +44,25 @@ def _f1_score(pred: str, ref: str) -> Dict[str, float]:
     }
 
 
+def _normalize_key_questions(raw_kqs) -> List[str]:
+    """将 key_questions 归一化为字符串列表，兼容嵌套 list/脏数据。"""
+    if not raw_kqs:
+        return []
+    out: List[str] = []
+
+    def _walk(x):
+        if isinstance(x, str):
+            t = x.strip()
+            if t and t not in out:
+                out.append(t)
+        elif isinstance(x, list):
+            for it in x:
+                _walk(it)
+
+    _walk(raw_kqs)
+    return out
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. F1（字 / 词）
 # ─────────────────────────────────────────────────────────────────────────────
@@ -83,7 +102,8 @@ def compute_key_coverage(
             'coverage_by_round': [...],  # 每轮累计覆盖率
         }
     """
-    kqs = log.meta.get("key_questions", []) if log.meta else []
+    raw_kqs = log.meta.get("key_questions", []) if log.meta else []
+    kqs = _normalize_key_questions(raw_kqs)
     if not kqs:
         return {"covered": [], "coverage_rate": 0.0, "coverage_by_round": []}
 
